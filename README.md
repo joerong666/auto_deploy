@@ -11,7 +11,7 @@ paramiko
 Usage:
 ===========
 Step1: 
-edit myapp.py、template/* according to your specific configuration
+edit myapp.py、template/*、gen_conf according to your specific configuration
 
 Step2: ./gen_conf
 generate concrete configuration template base on configuration template file located in template/*
