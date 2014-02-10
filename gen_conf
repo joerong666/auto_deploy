@@ -1,0 +1,88 @@
+#!/bin/env sh
+
+conf_home="conf"
+template="template"
+
+rm -r $conf_home
+
+#gen ds
+i=0
+while [ $i -lt 4 ]
+do
+    dest_dir="$conf_home/ds$i"
+    mkdir -p $dest_dir
+    
+    cnf="T_ds.conf" 
+    sed "s/\${i}/$i/g" $template/ds/$cnf >$dest_dir/$cnf
+
+    i=`expr $i + 1`
+done
+
+#gen mgr
+i=0
+while [ $i -lt 4 ]
+do
+    dest_dir="$conf_home/mgr$i"
+    mkdir -p $dest_dir
+
+    cnf="T_foo_conf.lua" 
+    sed "s/\${i}/$i/g" $template/mgr/$cnf >$dest_dir/$cnf
+
+    cnf="T_fooyun_mngr.ini" 
+    sed "s/\${i}/$i/g" $template/mgr/$cnf >$dest_dir/$cnf
+
+    i=`expr $i + 1`
+done
+
+#gen proxy
+i=0
+while [ $i -lt 4 ]
+do
+    dest_dir="$conf_home/proxy$i"
+    mkdir -p $dest_dir
+
+    cnf="T_proxy.ini" 
+    sed "s/\${i}/$i/g" $template/proxy/$cnf >$dest_dir/$cnf
+
+    i=`expr $i + 1`
+done
+
+#gen web
+i=0
+while [ $i -lt 5 ]
+do
+    dest_dir="$conf_home/web$i"
+    mkdir -p $dest_dir
+
+    cnf="T_application.conf" 
+    sed "s/\${i}/$i/g" $template/web/$cnf >$dest_dir/$cnf
+
+    i=`expr $i + 1`
+done
+
+#gen mcproxy
+i=0
+while [ $i -lt 1 ]
+do
+    dest_dir="$conf_home/mcproxy$i"
+    mkdir -p $dest_dir
+
+    cnf="T_mcproxy.ini" 
+    sed "s/\${i}/$i/g" $template/mcproxy/$cnf >$dest_dir/$cnf
+
+    cnf="T_app_conf.lua" 
+    cp $template/mcproxy/$cnf $dest_dir/$cnf
+
+    i=`expr $i + 1`
+done
+
+#config
+python deploy config ds
+
+python deploy config mgr
+
+python deploy config proxy
+
+python deploy config web
+
+python deploy config mcproxy

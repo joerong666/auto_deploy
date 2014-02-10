@@ -1,0 +1,174 @@
+#!/bin/env python
+
+import sys
+import paramiko
+import getopt
+
+from myapp import AppBase
+
+class AutoCMD:
+    def __init__(self, host, port, user, passwd):
+        self.host, self.port, self.user, self.passwd = (host, port, user, passwd)
+
+        self.ssh = paramiko.SSHClient() 
+        self.ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        self.ssh.connect(hostname = host, port = port, username = user, password = passwd)
+
+    def __del__(self):
+        self.ssh.close()
+        
+    def exec_cmd(self, cmd):
+        print "\nExec[%s] on %s@%s:%s" % (cmd, self.user, self.host, self.port)
+        stdin, stdout, stderr = self.ssh.exec_command(cmd)
+        out_list = stdout.readlines()
+        err_list = stderr.readlines()
+        
+        for line in out_list:
+            print line,
+
+        for line in err_list:
+            print line,
+
+
+class AutoSFTP:
+    
+    def __init__(self, host, port, user, passwd):
+        self.host, self.port, self.user, self.passwd = (host, port, user, passwd)
+
+        t = paramiko.Transport((host, port))
+        t.connect(username=user, password=passwd)
+        self.sftp = paramiko.SFTPClient.from_transport(t)
+
+    def __del__(self):
+        self.sftp.close()
+
+    def put(self, src, dest):
+        print "\nPut %s to %s@%s:%s:%s" % (src, self.user, self.host, self.port, dest)
+        self.sftp.put(src, dest)
+
+class AutoOperation:
+
+    def __init__(self, app_base):
+        self.app_base = app_base
+        self.apps = self.app_base.get_apps()
+        
+    def check_port(self, type):
+        for item in self.app_base.get_ssh():
+            cmd = AutoCMD(item["host"], item["port"], item["user"], item["passwd"])
+            cmd.exec_cmd("netstat -anp|egrep '%s'" % item["listen_port"])
+
+    def status(self, type):
+        app = self.apps[type]
+
+        for item in app.get_ssh():
+            cmd = AutoCMD(item["host"], item["port"], item["user"], item["passwd"])
+            cmd.exec_cmd(app.status_cmd())
+
+    def _inst(self, app):
+        svr_dic, tar_dic, cnf_dic = (app.get_svr(), app.get_tar(), app.get_cnf())
+
+        for svr in svr_dic:
+            cmd = AutoCMD(svr["host"], svr["port"], svr["user"], svr["passwd"])
+            sftp = AutoSFTP(svr["host"], svr["port"], svr["user"], svr["passwd"])
+
+
+            for f in tar_dic:
+                cmd.exec_cmd('rm -r %s/%s' % (svr["app_home"], f["re"]))
+                cmd.exec_cmd('mkdir -p %s/%s' % (svr["app_home"], f["re"]))
+                sftp.put('%s/%s' % (f["lo"], f["file"]), '%s/%s/%s' % (svr["app_home"], f["re"], f["file"]))
+                cmd.exec_cmd('cd %s/%s && tar xf *' % (svr["app_home"], f["re"]))
+
+            for f in cnf_dic:
+                sftp.put('%s/%s' % (f["lo"], f["file"]), '%s/%s/%s' % (svr["app_home"], f["re"], f["file"]))
+
+
+    def install(self, type):
+        print "Install %s" % type
+        print "========================================================================"
+
+        self._inst(self.apps[type])
+
+    def config(self, type):
+        print "Config %s" % type
+        print "========================================================================"
+
+        app = self.apps[type]
+        tar_dic = app.get_tar()
+
+        for f in tar_dic:
+            print "Update local configuration file for instance[%s]" % f["re"]
+            #config local configuration files
+            config = f["cb"]
+            if config:
+                #args: server dictionary, instance name
+                config(f["re"])
+
+
+    def _op(self, svr_dic, inst_list, op_cmd):
+        for svr in svr_dic:
+            cmd = AutoCMD(svr["host"], svr["port"], svr["user"], svr["passwd"])
+
+            for i in inst_list:
+                cmd.exec_cmd(op_cmd
+                                .replace(self.app_base.get_bin_dir(), "%s/%s" % (svr["app_home"], i))
+                                .replace(self.app_base.get_app_home(), svr["app_home"])
+                            )
+
+    def clean(self, type):
+        print "Clean %s" % type
+        print "========================================================================"
+
+        app = self.apps[type]
+        self._op(app.get_svr(), app.get_inst(), app.clean_cmd())
+
+    def start(self, type):
+        print "Start %s" % type
+        print "========================================================================"
+
+        app = self.apps[type]
+        self._op(app.get_svr(), app.get_inst(), app.start_cmd())
+
+    def stop(self, type):
+        print "Stop %s" % type
+        print "========================================================================"
+
+        app = self.apps[type]
+        self._op(app.get_svr(), app.get_inst(), app.stop_cmd())
+ 
+def usage():
+    app_base = AppBase.singleton()
+
+    print 'Usage:'
+    print '%s [check_port|status|config|install|clean|start|stop] [%s]' % (sys.argv[0], "|".join(app_base.get_app_ids()))
+
+def main(argv):
+    app_base = AppBase.singleton()
+    type = app_base.get_app_ids()
+    type.append("")
+
+    op = AutoOperation(app_base)
+    cmd = {'check_port': op.check_port,  'status': op.status, 'install': op.install, 
+            'clean': op.clean, 'start': op.start, 'stop': op.stop, "config": op.config, '':''}
+
+    if len(argv) == 1:
+        argv.append('')
+
+    if argv[0] not in cmd.keys():
+        usage(app_base)
+        sys.exit(1)
+
+    if argv[1] not in type:
+        usage(app_base)
+        sys.exit(1)
+
+    c, t = argv[0:2]
+   
+    f = cmd[c]
+    f(t)
+
+if __name__ == '__main__':
+    if len(sys.argv) < 2:
+        usage()
+        sys.exit(1)
+
+    main(sys.argv[1:])
