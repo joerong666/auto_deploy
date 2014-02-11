@@ -18,7 +18,7 @@ generate concrete configuration template base on configuration template file loc
 
 Step3: ./deploy
 show usage for your deployment, for example:
-./deploy [check_port|status|config|install|clean|start|stop] [mgr|web|mcproxy|ds|proxy]
+./deploy [check_port|status|config|install|clean|start|stop] [mgr|web|mcproxy|ds|proxy] [instance]
 
 Step4: ./deploy config mgr
 generate final available configuration
