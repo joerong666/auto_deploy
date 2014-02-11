@@ -2,7 +2,6 @@
 
 import sys
 import paramiko
-import getopt
 
 from myapp import AppBase
 
@@ -52,18 +51,6 @@ class AutoOperation:
         self.app_base = app_base
         self.apps = self.app_base.get_apps()
         
-    def check_port(self, type):
-        for item in self.app_base.get_ssh():
-            cmd = AutoCMD(item["host"], item["port"], item["user"], item["passwd"])
-            cmd.exec_cmd("netstat -anp|egrep '%s'" % item["listen_port"])
-
-    def status(self, type):
-        app = self.apps[type]
-
-        for item in app.get_ssh():
-            cmd = AutoCMD(item["host"], item["port"], item["user"], item["passwd"])
-            cmd.exec_cmd(app.status_cmd())
-
     def _inst(self, app):
         svr_dic, tar_dic, cnf_dic = (app.get_svr(), app.get_tar(), app.get_cnf())
 
@@ -81,14 +68,41 @@ class AutoOperation:
             for f in cnf_dic:
                 sftp.put('%s/%s' % (f["lo"], f["file"]), '%s/%s/%s' % (svr["app_home"], f["re"], f["file"]))
 
+    def _op(self, svr_dic, inst_list, op_cmd, inst_id):
+        for svr in svr_dic:
+            cmd = AutoCMD(svr["host"], svr["port"], svr["user"], svr["passwd"])
 
-    def install(self, type):
+            for i in inst_list:
+                flag = True
+                if inst_id and i != inst_id:
+                    flag = False
+
+                if flag:
+                    cmd.exec_cmd(op_cmd
+                                   .replace(self.app_base.get_bin_dir(), "%s/%s" % (svr["app_home"], i))
+                                   .replace(self.app_base.get_app_home(), svr["app_home"])
+                                )
+
+    def check_port(self, type, inst_id):
+        for item in self.app_base.get_ssh():
+            cmd = AutoCMD(item["host"], item["port"], item["user"], item["passwd"])
+            cmd.exec_cmd("netstat -anp|egrep '%s'" % item["listen_port"])
+
+    def status(self, type, inst_id):
+        app = self.apps[type]
+
+        for item in app.get_ssh():
+            cmd = AutoCMD(item["host"], item["port"], item["user"], item["passwd"])
+            cmd.exec_cmd(app.status_cmd())
+
+
+    def install(self, type, inst_id):
         print "Install %s" % type
         print "========================================================================"
 
         self._inst(self.apps[type])
 
-    def config(self, type):
+    def config(self, type, inst_id):
         print "Config %s" % type
         print "========================================================================"
 
@@ -103,43 +117,33 @@ class AutoOperation:
                 #args: server dictionary, instance name
                 config(f["re"])
 
-
-    def _op(self, svr_dic, inst_list, op_cmd):
-        for svr in svr_dic:
-            cmd = AutoCMD(svr["host"], svr["port"], svr["user"], svr["passwd"])
-
-            for i in inst_list:
-                cmd.exec_cmd(op_cmd
-                                .replace(self.app_base.get_bin_dir(), "%s/%s" % (svr["app_home"], i))
-                                .replace(self.app_base.get_app_home(), svr["app_home"])
-                            )
-
-    def clean(self, type):
+    def clean(self, type, inst_id):
         print "Clean %s" % type
         print "========================================================================"
 
         app = self.apps[type]
-        self._op(app.get_svr(), app.get_inst(), app.clean_cmd())
+        self._op(app.get_svr(), app.get_inst(), app.clean_cmd(), inst_id)
 
-    def start(self, type):
+    def start(self, type, inst_id):
         print "Start %s" % type
         print "========================================================================"
 
         app = self.apps[type]
-        self._op(app.get_svr(), app.get_inst(), app.start_cmd())
+        self._op(app.get_svr(), app.get_inst(), app.start_cmd(), inst_id)
 
-    def stop(self, type):
+    def stop(self, type, inst_id):
         print "Stop %s" % type
         print "========================================================================"
 
         app = self.apps[type]
-        self._op(app.get_svr(), app.get_inst(), app.stop_cmd())
+        self._op(app.get_svr(), app.get_inst(), app.stop_cmd(), inst_id)
  
 def usage():
     app_base = AppBase.singleton()
 
     print 'Usage:'
-    print '%s [check_port|status|config|install|clean|start|stop] [%s]' % (sys.argv[0], "|".join(app_base.get_app_ids()))
+    print '%s [check_port|status|config|install|clean|start|stop] [%s] [instance]' \
+            % (sys.argv[0], "|".join(app_base.get_app_ids()))
 
 def main(argv):
     app_base = AppBase.singleton()
@@ -150,21 +154,22 @@ def main(argv):
     cmd = {'check_port': op.check_port,  'status': op.status, 'install': op.install, 
             'clean': op.clean, 'start': op.start, 'stop': op.stop, "config": op.config, '':''}
 
-    if len(argv) == 1:
-        argv.append('')
-
-    if argv[0] not in cmd.keys():
-        usage(app_base)
+    if (len(argv) == 0) or (argv[0] == "-h") or (argv[0] not in cmd.keys()):
+        usage()
         sys.exit(1)
 
-    if argv[1] not in type:
-        usage(app_base)
-        sys.exit(1)
+    c, t, inst_id = (None, None, None)
+    if len(argv) >= 1:
+        c, = argv[0:1]
 
-    c, t = argv[0:2]
+    if len(argv) >= 2:
+        c, t = argv[0:2]
    
+    if len(argv) >= 3:
+        c, t, inst_id = argv[0:3]
+
     f = cmd[c]
-    f(t)
+    f(t, inst_id)
 
 if __name__ == '__main__':
     if len(sys.argv) < 2:
